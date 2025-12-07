@@ -17,7 +17,7 @@ export default function Home() {
     // Örnek: const RENDER_URL = "https://borsa-api-x1y2.onrender.com";
     // Sonunda eğik çizgi (/) olmamasına dikkat et.
     
-    const RENDER_URL = "BURAYA_RENDER_LINKINI_YAPISTIR"; 
+    const RENDER_URL = "https://brodkers-analiz-app.onrender.com"; 
 
     fetch(`${RENDER_URL}/api/analyze?symbol=${activeSymbol}`)
       .then((res) => {
