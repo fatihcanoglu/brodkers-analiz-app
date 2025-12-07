@@ -4,6 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import math
+import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -13,28 +14,38 @@ CORS(app)
 def analyze_stock():
     symbol = request.args.get('symbol', 'THYAO').upper()
     try:
+        # --- GİZLİ AJAN (USER-AGENT) AYARI ---
+        # Yahoo'nun bizi engellememesi için kendimizi Chrome tarayıcısı gibi tanıtıyoruz
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        })
+        
         # Veri Çekme
         ticker_symbol = f"{symbol}.IS" if not symbol.endswith('.IS') else symbol
-        ticker = yf.Ticker(ticker_symbol)
+        
+        # Session parametresi ile isteği gönderiyoruz
+        ticker = yf.Ticker(ticker_symbol, session=session)
+        
         hist = ticker.history(period="2y")
         info = ticker.info
         
-        if hist.empty: return jsonify({"error": "Veri yok"}), 404
+        if hist.empty: return jsonify({"error": "Yahoo veriyi vermedi (IP Engeli Olabilir) veya hisse yok."}), 404
 
-        # --- HAFİFLETİLMİŞ TEKNİK ANALİZ (KÜTÜPHANESİZ) ---
+        # --- HAFİFLETİLMİŞ TEKNİK ANALİZ ---
         
         # SMA Hesaplama
         hist['SMA50'] = hist['Close'].rolling(window=50).mean()
         hist['SMA200'] = hist['Close'].rolling(window=200).mean()
 
-        # RSI Hesaplama (Manuel)
+        # RSI Hesaplama
         delta = hist['Close'].diff()
         gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
         loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
         rs = gain / loss
         hist['RSI'] = 100 - (100 / (1 + rs))
         
-        # --------------------------------------------------
+        # ----------------------------------
 
         # Grafik Verisi
         son_120_gun = hist.iloc[-120:].copy()
@@ -122,7 +133,8 @@ def analyze_stock():
             "guncelleme_saati": simdi
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"HATA: {e}")
+        return jsonify({"error": f"Sunucu Hatası: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(port=5328)
