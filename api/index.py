@@ -1,13 +1,13 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import yfinance as yf
-import pandas_ta as ta
 import pandas as pd
+import numpy as np
 import math
-from datetime import datetime # <-- YENİ EKLENEN KÜTÜPHANE
+from datetime import datetime
 
 app = Flask(__name__)
-CORS(app) 
+CORS(app)
 
 @app.route('/api/analyze')
 def analyze_stock():
@@ -16,19 +16,33 @@ def analyze_stock():
         # Veri Çekme
         ticker_symbol = f"{symbol}.IS" if not symbol.endswith('.IS') else symbol
         ticker = yf.Ticker(ticker_symbol)
+        
+        # Son 2 yılın verisini alıyoruz
         hist = ticker.history(period="2y")
         info = ticker.info
         
-        if hist.empty: return jsonify({"error": "Veri yok"}), 404
+        if hist.empty: 
+            return jsonify({"error": "Veri yok veya sembol hatalı"}), 404
 
-        # Teknik Hesaplamalar
-        hist['SMA50'] = ta.sma(hist['Close'], length=50)
-        hist['SMA200'] = ta.sma(hist['Close'], length=200)
-        hist['RSI'] = ta.rsi(hist['Close'], length=14)
+        # --- MANUEL TEKNİK HESAPLAMALAR (HAFİFLETİLMİŞ) ---
+        
+        # 1. SMA (Hareketli Ortalamalar)
+        hist['SMA50'] = hist['Close'].rolling(window=50).mean()
+        hist['SMA200'] = hist['Close'].rolling(window=200).mean()
 
-        son_6_ay = hist.iloc[-120:].copy()
+        # 2. RSI Hesaplama (Wilder Yöntemi)
+        delta = hist['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+        loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+        rs = gain / loss
+        hist['RSI'] = 100 - (100 / (1 + rs))
+        
+        # -----------------------------------------------------
+
+        # Grafik Verisi (Son 120 Gün)
+        son_120_gun = hist.iloc[-120:].copy()
         grafik_verisi = []
-        for date, row in son_6_ay.iterrows():
+        for date, row in son_120_gun.iterrows():
             grafik_verisi.append({
                 "tarih": date.strftime('%Y-%m-%d'),
                 "fiyat": round(row['Close'], 2),
@@ -36,8 +50,12 @@ def analyze_stock():
                 "sma200": round(row['SMA200'], 2) if pd.notna(row['SMA200']) else None
             })
         
-        # Son Değerler
+        # Son Anlık Veriler
         son_fiyat = hist['Close'].iloc[-1]
+        onceki_kapanis = hist['Close'].iloc[-2]
+        yuzde_degisim = ((son_fiyat - onceki_kapanis) / onceki_kapanis) * 100
+
+        # RSI ve SMA Son Değerler (NaN kontrolü ile)
         son_rsi = hist['RSI'].iloc[-1] if pd.notna(hist['RSI'].iloc[-1]) else 50.0
         son_sma200 = hist['SMA200'].iloc[-1] if pd.notna(hist['SMA200'].iloc[-1]) else 0
         
@@ -52,29 +70,33 @@ def analyze_stock():
         graham_durum = "Nötr"
         if eps and bvps and eps > 0 and bvps > 0:
             graham_degeri = math.sqrt(22.5 * eps * bvps)
-            if son_fiyat < graham_degeri: graham_durum = "UCUZ (İskontolu)"
-            else: graham_durum = "PAHALI (Primli)"
+            if son_fiyat < graham_degeri: graham_durum = "İskontolu (Model Altı)"
+            else: graham_durum = "Primli (Model Üstü)"
 
-        # Yapay Zeka Yorumu
+        # Yapay Zeka Yorumları
         yorumlar = []
+        
+        # Momentum Yorumu
+        if yuzde_degisim > 3: yorumlar.append(f"Momentum: Güçlü yükseliş (%{yuzde_degisim:.2f}).")
+        elif yuzde_degisim < -3: yorumlar.append(f"Momentum: Sert düşüş (%{yuzde_degisim:.2f}).")
+        
+        # Trend Yorumu
         if son_sma200 > 0:
-            if son_fiyat < son_sma200:
-                yorumlar.append(f"Teknik: {symbol}, SMA200'ün altında (Ayı Piyasası).")
-            else:
-                yorumlar.append(f"Teknik: {symbol}, SMA200'ün üzerinde (Boğa Piyasası).")
+            if son_fiyat < son_sma200: yorumlar.append("Trend: Fiyat 200 günlük ortalamanın altında (Zayıf).")
+            else: yorumlar.append("Trend: Fiyat 200 günlük ortalamanın üzerinde (Güçlü).")
         
+        # Değerleme Yorumu
         if graham_degeri:
-            if son_fiyat < graham_degeri:
-                yorumlar.append("Temel: Graham modeline göre İSKONTOLU.")
-            else:
-                yorumlar.append("Temel: Graham modeline göre PRİMLİ.")
+            if son_fiyat < graham_degeri: yorumlar.append("Değerleme: Temel olarak iskontolu görünüyor.")
+            else: yorumlar.append("Değerleme: Temel olarak primli görünüyor.")
         
-        if son_rsi < 30: yorumlar.append("RSI: Aşırı satım bölgesinde (Tepki gelebilir).")
-        elif son_rsi > 70: yorumlar.append("RSI: Aşırı alım bölgesinde (Dikkat).")
+        # RSI Yorumu
+        if son_rsi < 30: yorumlar.append("RSI: Aşırı satım bölgesinde.")
+        elif son_rsi > 70: yorumlar.append("RSI: Aşırı alım bölgesinde.")
         
         ai_analiz_metni = " ".join(yorumlar)
 
-        # Puanlama
+        # Basit Puanlama
         puan = 50
         if son_sma200 > 0 and son_fiyat > son_sma200: puan += 15
         else: puan -= 10
@@ -84,13 +106,13 @@ def analyze_stock():
         elif son_rsi > 70: puan -= 10
         puan = max(0, min(100, puan))
         
-        # Zaman Damgası Oluştur
-        simdi = datetime.now().strftime("%d.%m.%Y - %H:%M:%S") # <-- SAATİ ALDIK
+        simdi = datetime.now().strftime("%d.%m.%Y - %H:%M:%S")
 
         return jsonify({
             "symbol": symbol,
             "irket_adi": info.get('longName', symbol),
             "fiyat": f"{son_fiyat:.2f}",
+            "yuzde_degisim": f"{yuzde_degisim:.2f}",
             "puan": puan,
             "analiz": {
                 "rsi": f"{son_rsi:.1f}",
@@ -102,11 +124,11 @@ def analyze_stock():
             },
             "renk": "green" if puan >= 70 else "red" if puan <= 40 else "yellow",
             "grafik_data": grafik_verisi,
-            "guncelleme_saati": simdi # <-- FRONTEND'E GÖNDERİYORUZ
+            "guncelleme_saati": simdi
         })
     except Exception as e:
         print(f"HATA: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(port=5328, debug=True)
+    app.run(port=5328)
