@@ -16,30 +16,27 @@ def analyze_stock():
         # Veri Çekme
         ticker_symbol = f"{symbol}.IS" if not symbol.endswith('.IS') else symbol
         ticker = yf.Ticker(ticker_symbol)
-        
-        # Son 2 yılın verisini alıyoruz
         hist = ticker.history(period="2y")
         info = ticker.info
         
-        if hist.empty: 
-            return jsonify({"error": "Veri yok veya sembol hatalı"}), 404
+        if hist.empty: return jsonify({"error": "Veri yok"}), 404
 
-        # --- MANUEL TEKNİK HESAPLAMALAR (HAFİFLETİLMİŞ) ---
+        # --- HAFİFLETİLMİŞ TEKNİK ANALİZ (KÜTÜPHANESİZ) ---
         
-        # 1. SMA (Hareketli Ortalamalar)
+        # SMA Hesaplama
         hist['SMA50'] = hist['Close'].rolling(window=50).mean()
         hist['SMA200'] = hist['Close'].rolling(window=200).mean()
 
-        # 2. RSI Hesaplama (Wilder Yöntemi)
+        # RSI Hesaplama (Manuel)
         delta = hist['Close'].diff()
         gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
         loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
         rs = gain / loss
         hist['RSI'] = 100 - (100 / (1 + rs))
         
-        # -----------------------------------------------------
+        # --------------------------------------------------
 
-        # Grafik Verisi (Son 120 Gün)
+        # Grafik Verisi
         son_120_gun = hist.iloc[-120:].copy()
         grafik_verisi = []
         for date, row in son_120_gun.iterrows():
@@ -50,12 +47,11 @@ def analyze_stock():
                 "sma200": round(row['SMA200'], 2) if pd.notna(row['SMA200']) else None
             })
         
-        # Son Anlık Veriler
+        # Son Değerler
         son_fiyat = hist['Close'].iloc[-1]
         onceki_kapanis = hist['Close'].iloc[-2]
         yuzde_degisim = ((son_fiyat - onceki_kapanis) / onceki_kapanis) * 100
 
-        # RSI ve SMA Son Değerler (NaN kontrolü ile)
         son_rsi = hist['RSI'].iloc[-1] if pd.notna(hist['RSI'].iloc[-1]) else 50.0
         son_sma200 = hist['SMA200'].iloc[-1] if pd.notna(hist['SMA200'].iloc[-1]) else 0
         
@@ -73,30 +69,29 @@ def analyze_stock():
             if son_fiyat < graham_degeri: graham_durum = "İskontolu (Model Altı)"
             else: graham_durum = "Primli (Model Üstü)"
 
-        # Yapay Zeka Yorumları
+        # Yapay Zeka Yorumu
         yorumlar = []
-        
-        # Momentum Yorumu
         if yuzde_degisim > 3: yorumlar.append(f"Momentum: Güçlü yükseliş (%{yuzde_degisim:.2f}).")
         elif yuzde_degisim < -3: yorumlar.append(f"Momentum: Sert düşüş (%{yuzde_degisim:.2f}).")
-        
-        # Trend Yorumu
+
         if son_sma200 > 0:
-            if son_fiyat < son_sma200: yorumlar.append("Trend: Fiyat 200 günlük ortalamanın altında (Zayıf).")
-            else: yorumlar.append("Trend: Fiyat 200 günlük ortalamanın üzerinde (Güçlü).")
+            if son_fiyat < son_sma200:
+                yorumlar.append("Teknik: Fiyat 200 günlük ortalamanın altında.")
+            else:
+                yorumlar.append("Teknik: Fiyat 200 günlük ortalamanın üzerinde.")
         
-        # Değerleme Yorumu
         if graham_degeri:
-            if son_fiyat < graham_degeri: yorumlar.append("Değerleme: Temel olarak iskontolu görünüyor.")
-            else: yorumlar.append("Değerleme: Temel olarak primli görünüyor.")
+            if son_fiyat < graham_degeri:
+                yorumlar.append("Temel: Graham model değerinin altında.")
+            else:
+                yorumlar.append("Temel: Graham model değerinin üzerinde.")
         
-        # RSI Yorumu
-        if son_rsi < 30: yorumlar.append("RSI: Aşırı satım bölgesinde.")
-        elif son_rsi > 70: yorumlar.append("RSI: Aşırı alım bölgesinde.")
+        if son_rsi < 30: yorumlar.append("Göstergeler: RSI aşırı satım bölgesinde.")
+        elif son_rsi > 70: yorumlar.append("Göstergeler: RSI aşırı alım bölgesinde.")
         
         ai_analiz_metni = " ".join(yorumlar)
 
-        # Basit Puanlama
+        # Puanlama
         puan = 50
         if son_sma200 > 0 and son_fiyat > son_sma200: puan += 15
         else: puan -= 10
@@ -127,7 +122,6 @@ def analyze_stock():
             "guncelleme_saati": simdi
         })
     except Exception as e:
-        print(f"HATA: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
