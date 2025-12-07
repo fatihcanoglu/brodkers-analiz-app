@@ -1,6 +1,5 @@
 Flask
 Flask-Cors
 yfinance
-pandas-ta
 pandas
 numpy
