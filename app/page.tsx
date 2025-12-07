@@ -12,10 +12,16 @@ export default function Home() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    // Vercel için URL yapısı (Relative Path)
-    fetch(`/api/analyze?symbol=${activeSymbol}`)
+    
+    // --- DİKKAT: AŞAĞIDAKİ LINKI KENDİ RENDER LINKINLE DEĞİŞTİR ---
+    // Örnek: const RENDER_URL = "https://borsa-api-x1y2.onrender.com";
+    // Sonunda eğik çizgi (/) olmamasına dikkat et.
+    
+    const RENDER_URL = "BURAYA_RENDER_LINKINI_YAPISTIR"; 
+
+    fetch(`${RENDER_URL}/api/analyze?symbol=${activeSymbol}`)
       .then((res) => {
-        if (!res.ok) throw new Error('Sunucu hatası veya hisse bulunamadı.');
+        if (!res.ok) throw new Error('Sunucuya ulaşılamadı veya hisse bulunamadı.');
         return res.json();
       })
       .then((incomingData) => {
@@ -38,13 +44,12 @@ export default function Home() {
   if (loading) return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
       <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="animate-pulse">Veriler Analiz Ediliyor...</p>
+      <p className="animate-pulse">Veriler Render Sunucusundan Çekiliyor...</p>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center py-10 px-4 font-sans">
-      {/* Arama Kutusu */}
       <form onSubmit={handleSearch} className="mb-8 flex gap-2 w-full max-w-md">
         <input 
           type="text" 
@@ -56,18 +61,10 @@ export default function Home() {
         <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-r-lg font-bold transition-colors">ARA</button>
       </form>
 
-      {/* Hata Mesajı */}
-      {error && (
-        <div className="text-red-400 mb-6 bg-red-900/20 p-4 rounded-lg border border-red-800 flex items-center gap-2 max-w-2xl w-full">
-            ⚠️ {error} <br/> <span className="text-xs text-slate-400">Not: Yahoo Finance bazen yoğunluktan dolayı geçici hata verebilir.</span>
-        </div>
-      )}
+      {error && <div className="text-red-400 mb-6 bg-red-900/20 p-4 rounded-lg border border-red-800 max-w-2xl w-full">⚠️ {error}</div>}
 
-      {/* Ana Veri Ekranı */}
       {data && !error && (
         <div className="bg-slate-800 rounded-3xl p-8 shadow-2xl w-full max-w-2xl border border-slate-700">
-          
-          {/* Başlık ve Skor */}
           <div className="flex justify-between items-start mb-6">
             <div>
               <h1 className="text-5xl font-black text-white tracking-tight">{data.symbol}</h1>
@@ -82,7 +79,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Fiyat ve Yüzde */}
           <div className="flex items-end gap-4 mb-8">
             <div className="text-6xl font-bold text-white tracking-tighter">₺{data.fiyat}</div>
             <div className={`text-lg font-bold mb-3 px-3 py-1 rounded-lg flex items-center gap-1 ${
@@ -92,7 +88,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Graham Kartı */}
           <div className="bg-slate-700/30 rounded-2xl p-5 mb-8 border border-slate-600/30 backdrop-blur-sm">
             <div className="flex justify-between items-center border-b border-slate-600/30 pb-3 mb-3">
                 <span className="text-xs text-slate-400 uppercase tracking-widest font-semibold">GRAHAM TEORİK DEĞER</span>
@@ -107,14 +102,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Temel Oranlar */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             <Box title="RSI" value={data.analiz.rsi} />
             <Box title="F/K" value={data.analiz.fk} />
             <Box title="PD/DD" value={data.analiz.pd_dd} />
           </div>
 
-          {/* Grafik Alanı */}
           <div className="h-64 w-full bg-slate-900/50 rounded-xl p-4 border border-slate-700/50 relative mb-8">
             <ResponsiveContainer width="100%" height="100%">
                <LineChart data={data.grafik_data}>
@@ -134,27 +127,23 @@ export default function Home() {
              </ResponsiveContainer>
           </div>
 
-          {/* AI Yorum Alanı */}
           <div className="bg-gradient-to-br from-blue-900/30 to-slate-800 p-6 rounded-2xl border border-blue-500/20 relative overflow-hidden mb-6">
              <h3 className="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
-                🤖 OTOMATİK ANALİZ RAPORU
+                🤖 OTOMATİK ANALİZ
              </h3>
              <p className="text-slate-300 text-sm leading-relaxed font-medium">
                 {data.analiz.ai_yorum}
              </p>
           </div>
           
-          {/* Footer */}
           <div className="mt-4 border-t border-slate-700/50 pt-4">
-             <p className="text-[10px] text-slate-500 font-mono text-center mb-4">Güncelleme: {data.guncelleme_saati}</p>
+             <p className="text-[10px] text-slate-500 font-mono text-center mb-4">Son Güncelleme: {data.guncelleme_saati}</p>
              <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
                 <p className="text-[9px] text-slate-500 leading-relaxed text-justify">
-                   <strong>YASAL UYARI:</strong> Burada yer alan veriler ve hesaplamalar yatırım tavsiyesi değildir. 
-                   Sistem tamamen matematiksel modelleme üzerine kuruludur. Veriler gecikmeli olabilir.
+                   <strong>YASAL UYARI:</strong> Burada yer alan veriler yatırım tavsiyesi değildir. Gecikmeli olabilir.
                 </p>
              </div>
           </div>
-          
         </div>
       )}
     </div>
