@@ -3,3 +3,5 @@ Flask-Cors
 yfinance
 pandas
 numpy
+gunicorn
+requests
