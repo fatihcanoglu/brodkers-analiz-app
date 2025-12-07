@@ -92,4 +92,32 @@ def analyze_stock():
         else: puan -= 10
         if fk and 0 < fk < 10: puan += 15
         elif fk and fk > 25: puan -= 10
-        if son_
+        if son_rsi < 30: puan += 20
+        elif son_rsi > 70: puan -= 10
+        puan = max(0, min(100, puan))
+        
+        simdi = datetime.now().strftime("%d.%m.%Y - %H:%M:%S")
+
+        return jsonify({
+            "symbol": symbol,
+            "irket_adi": info.get('longName', symbol),
+            "fiyat": f"{son_fiyat:.2f}",
+            "yuzde_degisim": f"{yuzde_degisim:.2f}",
+            "puan": puan,
+            "analiz": {
+                "rsi": f"{son_rsi:.1f}",
+                "fk": f"{fk:.2f}" if fk else "N/A",
+                "pd_dd": f"{pd_dd:.2f}" if pd_dd else "N/A",
+                "graham": f"{graham_degeri:.2f}" if graham_degeri else "N/A",
+                "graham_durum": graham_durum,
+                "ai_yorum": ai_analiz_metni
+            },
+            "renk": "green" if puan >= 70 else "red" if puan <= 40 else "yellow",
+            "grafik_data": grafik_verisi,
+            "guncelleme_saati": simdi
+        })
+    except Exception as e:
+        return jsonify({"error": f"Sunucu Hatası: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    app.run(port=5328)
