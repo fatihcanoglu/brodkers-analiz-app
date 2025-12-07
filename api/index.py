@@ -4,45 +4,35 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import math
-import requests
 from datetime import datetime
 
 app = Flask(__name__)
-# CORS ayarı: Vercel'den gelen isteklere izin ver
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)
 
 @app.route('/api/analyze')
 def analyze_stock():
     symbol = request.args.get('symbol', 'THYAO').upper()
     try:
-        # --- GİZLİ AJAN (USER-AGENT) AYARI ---
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        })
-        
-        # Veri Çekme
+        # Veri Çekme - (Ajan kodlarını kaldırdık, kütüphanenin kendi haline bıraktık)
         ticker_symbol = f"{symbol}.IS" if not symbol.endswith('.IS') else symbol
-        ticker = yf.Ticker(ticker_symbol, session=session)
+        ticker = yf.Ticker(ticker_symbol)
         
         hist = ticker.history(period="2y")
         info = ticker.info
         
-        if hist.empty: return jsonify({"error": "Veri bulunamadı. Sembolü kontrol edin."}), 404
+        if hist.empty: return jsonify({"error": "Veri bulunamadı veya Yahoo engeli var."}), 404
 
-        # --- HAFİFLETİLMİŞ TEKNİK ANALİZ ---
-        # SMA
+        # --- TEKNİK ANALİZ ---
         hist['SMA50'] = hist['Close'].rolling(window=50).mean()
         hist['SMA200'] = hist['Close'].rolling(window=200).mean()
 
-        # RSI (Manuel Hesaplama)
         delta = hist['Close'].diff()
         gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
         loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
         rs = gain / loss
         hist['RSI'] = 100 - (100 / (1 + rs))
         
-        # Grafik Verisi Hazırlama
+        # Grafik Verisi
         son_120_gun = hist.iloc[-120:].copy()
         grafik_verisi = []
         for date, row in son_120_gun.iterrows():
@@ -60,7 +50,7 @@ def analyze_stock():
         son_rsi = hist['RSI'].iloc[-1] if pd.notna(hist['RSI'].iloc[-1]) else 50.0
         son_sma200 = hist['SMA200'].iloc[-1] if pd.notna(hist['SMA200'].iloc[-1]) else 0
         
-        # Temel Veriler & Graham
+        # Temel Veriler
         fk = info.get('trailingPE')
         pd_dd = info.get('priceToBook')
         eps = info.get('trailingEps')
@@ -77,14 +67,8 @@ def analyze_stock():
         yorumlar = []
         if yuzde_degisim > 3: yorumlar.append(f"Momentum: Güçlü yükseliş (%{yuzde_degisim:.2f}).")
         elif yuzde_degisim < -3: yorumlar.append(f"Momentum: Sert düşüş (%{yuzde_degisim:.2f}).")
-        if son_sma200 > 0:
-            if son_fiyat < son_sma200: yorumlar.append("Teknik: Fiyat 200 günlüğün altında.")
-            else: yorumlar.append("Teknik: Fiyat 200 günlüğün üzerinde.")
-        if graham_degeri:
-            if son_fiyat < graham_degeri: yorumlar.append("Temel: Graham değerine göre iskontolu.")
-            else: yorumlar.append("Temel: Graham değerine göre primli.")
         
-        ai_analiz_metni = " ".join(yorumlar)
+        ai_analiz_metni = " ".join(yorumlar) if yorumlar else "Yatay seyir izleniyor."
 
         # Puanlama
         puan = 50
@@ -117,7 +101,7 @@ def analyze_stock():
             "guncelleme_saati": simdi
         })
     except Exception as e:
-        return jsonify({"error": f"Sunucu Hatası: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(port=5328)
